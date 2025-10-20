@@ -1,0 +1,59 @@
+<svg fill="none" viewBox="0 0 800 100" width="800" height="100" xmlns="http://www.w3.org/2000/svg">
+  <foreignObject width="100%" height="100%">
+    <div xmlns="http://www.w3.org/1999/xhtml">
+      <style>
+        @keyframes gradientText {
+          0%, 100% {
+            background-size: 200% 200%;
+            background-position: left center;
+          }
+          50% {
+            background-size: 200% 200%;
+            background-position: right center;
+          }
+        }
+        
+        @keyframes fadeIn {
+          from {
+            opacity: 0;
+          }
+          to {
+            opacity: 1;
+          }
+        }
+        
+        .title-container {
+          display: flex;
+          justify-content: flex-start;
+          align-items: center;
+          height: 100%;
+          width: 100%;
+        }
+        
+        .animated-title {
+          font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif;
+          font-size: 32px;
+          font-weight: bold;
+          background: linear-gradient(90deg, 
+            #667eea 0%, 
+            #764ba2 25%, 
+            #f093fb 50%, 
+            #667eea 75%, 
+            #764ba2 100%
+          );
+          background-size: 200% 200%;
+          -webkit-background-clip: text;
+          -webkit-text-fill-color: transparent;
+          background-clip: text;
+          animation: gradientText 4s ease infinite, fadeIn 1s ease-in;
+          letter-spacing: -0.5px;
+        }
+      </style>
+      <div class="title-container">
+        <div class="animated-title">
+          contracts-interfaces-IPeaceToken.sol
+        </div>
+      </div>
+    </div>
+  </foreignObject>
+</svg>
