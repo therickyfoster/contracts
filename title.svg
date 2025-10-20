@@ -24,7 +24,7 @@
         
         .title-container {
           display: flex;
-          justify-content: flex-start;
+          justify-content: center;
           align-items: center;
           height: 100%;
           width: 100%;
@@ -44,6 +44,8 @@
           background-size: 200% 200%;
           -webkit-background-clip: text;
           -webkit-text-fill-color: transparent;
+          -moz-background-clip: text;
+          -moz-text-fill-color: transparent;
           background-clip: text;
           animation: gradientText 4s ease infinite, fadeIn 1s ease-in;
           letter-spacing: -0.5px;
