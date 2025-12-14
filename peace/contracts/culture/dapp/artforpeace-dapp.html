@@ -1,0 +1,1322 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Art for Peace DAO - Live Blockchain Interface</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .title {
+            font-size: 2.5em;
+            font-weight: 800;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .status-bar {
+            display: flex;
+            gap: 20px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+        }
+
+        .status-item {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+            color: white;
+            padding: 10px 20px;
+            border-radius: 50px;
+            font-weight: 600;
+            font-size: 0.9em;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .status-dot {
+            width: 8px;
+            height: 8px;
+            background: #00ff88;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
+        .main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 30px;
+            margin-bottom: 30px;
+        }
+
+        @media (max-width: 968px) {
+            .main-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        .panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 30px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        }
+
+        .panel-title {
+            font-size: 1.5em;
+            font-weight: 700;
+            margin-bottom: 20px;
+            color: #333;
+        }
+
+        .form-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #555;
+        }
+
+        input, select, textarea {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 1em;
+            transition: all 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        .btn {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 12px 30px;
+            border-radius: 10px;
+            font-size: 1em;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: inline-block;
+        }
+
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 20px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
+        }
+
+        .btn-success {
+            background: linear-gradient(135deg, #00d2ff 0%, #00ff88 100%);
+        }
+
+        .activity-feed {
+            max-height: 400px;
+            overflow-y: auto;
+        }
+
+        .activity-item {
+            background: #f8f9fa;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 10px;
+            border-left: 4px solid #667eea;
+            animation: slideIn 0.5s ease;
+        }
+
+        @keyframes slideIn {
+            from {
+                transform: translateX(-20px);
+                opacity: 0;
+            }
+            to {
+                transform: translateX(0);
+                opacity: 1;
+            }
+        }
+
+        .activity-time {
+            color: #999;
+            font-size: 0.85em;
+        }
+
+        .activity-action {
+            font-weight: 600;
+            color: #333;
+            margin: 5px 0;
+        }
+
+        .activity-details {
+            color: #666;
+            font-size: 0.9em;
+        }
+
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .stat-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 15px;
+            text-align: center;
+        }
+
+        .stat-value {
+            font-size: 2em;
+            font-weight: 700;
+            margin-bottom: 5px;
+        }
+
+        .stat-label {
+            font-size: 0.9em;
+            opacity: 0.9;
+        }
+
+        .proposal-card {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 15px;
+            margin-bottom: 15px;
+            border: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .proposal-card:hover {
+            border-color: #667eea;
+            transform: translateY(-2px);
+        }
+
+        .proposal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .proposal-id {
+            font-weight: 700;
+            color: #667eea;
+        }
+
+        .proposal-status {
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 0.85em;
+            font-weight: 600;
+        }
+
+        .status-pending {
+            background: #ffeaa7;
+            color: #6c5ce7;
+        }
+
+        .status-executed {
+            background: #55efc4;
+            color: #00b894;
+        }
+
+        .status-canceled {
+            background: #fab1a0;
+            color: #d63031;
+        }
+
+        .tabs {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #e0e0e0;
+        }
+
+        .tab {
+            padding: 10px 20px;
+            background: none;
+            border: none;
+            font-weight: 600;
+            color: #999;
+            cursor: pointer;
+            transition: all 0.3s;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+        }
+
+        .tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .tab-content {
+            display: none;
+        }
+
+        .tab-content.active {
+            display: block;
+        }
+
+        .alert {
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .alert-info {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .alert-success {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .alert-error {
+            background: #ffebee;
+            color: #c62828;
+        }
+
+        .loading {
+            display: inline-block;
+            width: 20px;
+            height: 20px;
+            border: 3px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 1s ease-in-out infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal.active {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            padding: 30px;
+            border-radius: 20px;
+            max-width: 500px;
+            width: 90%;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+
+        .modal-title {
+            font-size: 1.5em;
+            font-weight: 700;
+            margin-bottom: 20px;
+        }
+
+        .network-selector {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+
+        .network-btn {
+            flex: 1;
+            padding: 10px;
+            border: 2px solid #e0e0e0;
+            background: white;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+
+        .network-btn:hover {
+            border-color: #667eea;
+        }
+
+        .network-btn.active {
+            background: #667eea;
+            color: white;
+            border-color: #667eea;
+        }
+
+        .contract-address {
+            font-family: monospace;
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 8px;
+            word-break: break-all;
+            font-size: 0.9em;
+        }
+
+        .live-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            padding: 8px 15px;
+            background: rgba(0, 255, 136, 0.1);
+            border-radius: 20px;
+            color: #00b894;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+
+        .live-dot {
+            width: 8px;
+            height: 8px;
+            background: #00ff88;
+            border-radius: 50%;
+            animation: pulse 2s infinite;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <div class="header">
+            <h1 class="title">🕊️ Art for Peace DAO</h1>
+            <p class="subtitle">Decentralized governance for conflict de-escalation and cultural healing</p>
+            
+            <div class="status-bar">
+                <div class="status-item">
+                    <span class="status-dot"></span>
+                    <span id="networkName">Not Connected</span>
+                </div>
+                <div class="status-item">
+                    <span id="accountAddress">Connect Wallet</span>
+                </div>
+                <div class="status-item">
+                    <span id="blockNumber">Block: -</span>
+                </div>
+                <div class="live-indicator">
+                    <span class="live-dot"></span>
+                    <span>Live Updates</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Grid -->
+        <div class="main-grid">
+            <!-- Left Panel - Contract Interaction -->
+            <div class="panel">
+                <h2 class="panel-title">Contract Interface</h2>
+                
+                <!-- Connection Section -->
+                <div id="connectionSection">
+                    <div class="alert alert-info">
+                        <span>⚡</span>
+                        <span>Connect your wallet to interact with the DAO</span>
+                    </div>
+                    
+                    <div class="network-selector">
+                        <button class="network-btn active" data-network="sepolia">Sepolia Testnet</button>
+                        <button class="network-btn" data-network="mainnet">Ethereum Mainnet</button>
+                        <button class="network-btn" data-network="polygon">Polygon</button>
+                    </div>
+                    
+                    <button id="connectBtn" class="btn btn-success" style="width: 100%; margin-bottom: 20px;">
+                        Connect MetaMask
+                    </button>
+                    
+                    <div id="deploySection" style="display: none;">
+                        <button id="deployBtn" class="btn btn-secondary" style="width: 100%;">
+                            Deploy New Contract
+                        </button>
+                        <p style="margin-top: 10px; color: #666; font-size: 0.9em;">
+                            Or enter existing contract address:
+                        </p>
+                        <input type="text" id="existingContract" placeholder="0x..." style="margin-top: 10px;">
+                        <button id="loadContractBtn" class="btn" style="width: 100%; margin-top: 10px;">
+                            Load Contract
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Tabs -->
+                <div id="interfaceSection" style="display: none;">
+                    <div class="tabs">
+                        <button class="tab active" data-tab="propose">Propose</button>
+                        <button class="tab" data-tab="vote">Vote</button>
+                        <button class="tab" data-tab="admin">Admin</button>
+                        <button class="tab" data-tab="stats">Stats</button>
+                    </div>
+
+                    <!-- Propose Tab -->
+                    <div class="tab-content active" id="proposeTab">
+                        <form id="proposalForm">
+                            <div class="form-group">
+                                <label>Target Address</label>
+                                <input type="text" id="targetAddress" placeholder="0x..." required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Amount (ETH)</label>
+                                <input type="number" id="proposalAmount" step="0.001" placeholder="0.0" required>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Jurisdiction</label>
+                                <select id="jurisdiction" required>
+                                    <option value="US">United States</option>
+                                    <option value="EU">European Union</option>
+                                    <option value="UK">United Kingdom</option>
+                                    <option value="CA">Canada</option>
+                                    <option value="AU">Australia</option>
+                                    <option value="GLOBAL">Global</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Purpose</label>
+                                <select id="purposeCode" required>
+                                    <option value="EDUCATION">Education Initiative</option>
+                                    <option value="CULTURAL">Cultural Program</option>
+                                    <option value="HUMANITARIAN">Humanitarian Aid</option>
+                                    <option value="PEACE">Peace Building</option>
+                                    <option value="RELIEF">Disaster Relief</option>
+                                </select>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>Description</label>
+                                <textarea id="description" rows="3" placeholder="Describe the proposal..." required></textarea>
+                            </div>
+                            
+                            <div class="form-group">
+                                <label>
+                                    <input type="checkbox" id="requiresEscrow">
+                                    Requires Escrow
+                                </label>
+                            </div>
+                            
+                            <button type="submit" class="btn" style="width: 100%;">
+                                Submit Proposal
+                            </button>
+                        </form>
+                    </div>
+
+                    <!-- Vote Tab -->
+                    <div class="tab-content" id="voteTab">
+                        <div id="proposalsList">
+                            <p style="color: #999;">Loading proposals...</p>
+                        </div>
+                    </div>
+
+                    <!-- Admin Tab -->
+                    <div class="tab-content" id="adminTab">
+                        <div class="form-group">
+                            <label>Set Compliance Oracle</label>
+                            <input type="text" id="complianceOracle" placeholder="0x...">
+                            <button class="btn btn-secondary" style="width: 100%; margin-top: 10px;">
+                                Update Oracle
+                            </button>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label>Emergency Actions</label>
+                            <button id="pauseBtn" class="btn btn-secondary" style="width: 100%; margin-bottom: 10px;">
+                                Pause Contract
+                            </button>
+                            <button id="unpauseBtn" class="btn btn-success" style="width: 100%;">
+                                Unpause Contract
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Stats Tab -->
+                    <div class="tab-content" id="statsTab">
+                        <div class="stats-grid">
+                            <div class="stat-card">
+                                <div class="stat-value" id="totalProposals">0</div>
+                                <div class="stat-label">Proposals</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="treasuryBalance">0 ETH</div>
+                                <div class="stat-label">Treasury</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="activeVoters">0</div>
+                                <div class="stat-label">Active Voters</div>
+                            </div>
+                            <div class="stat-card">
+                                <div class="stat-value" id="successRate">0%</div>
+                                <div class="stat-label">Success Rate</div>
+                            </div>
+                        </div>
+                        
+                        <div style="margin-top: 20px;">
+                            <h3 style="margin-bottom: 10px;">Contract Info</h3>
+                            <div class="contract-address" id="contractAddressDisplay">
+                                Not deployed
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel - Live Activity -->
+            <div class="panel">
+                <h2 class="panel-title">🔴 Live Activity Feed</h2>
+                
+                <div class="alert alert-success">
+                    <span>✨</span>
+                    <span>All users see updates in real-time</span>
+                </div>
+                
+                <div class="activity-feed" id="activityFeed">
+                    <div class="activity-item">
+                        <div class="activity-time">Just now</div>
+                        <div class="activity-action">System Initialized</div>
+                        <div class="activity-details">Waiting for contract deployment...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Proposals Display Panel -->
+        <div class="panel">
+            <h2 class="panel-title">Active Proposals</h2>
+            <div id="proposalsDisplay">
+                <p style="color: #999;">Connect wallet to view proposals</p>
+            </div>
+        </div>
+    </div>
+
+    <!-- Transaction Modal -->
+    <div id="txModal" class="modal">
+        <div class="modal-content">
+            <h3 class="modal-title">Transaction Status</h3>
+            <div id="txStatus">
+                <div class="loading"></div>
+                <p style="margin-top: 20px;">Processing transaction...</p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Contract ABI (simplified for key functions)
+        const CONTRACT_ABI = [
+            {
+                "inputs": [],
+                "name": "proposalCounter",
+                "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+                "stateMutability": "view",
+                "type": "function"
+            },
+            {
+                "inputs": [
+                    {"internalType": "address", "name": "target", "type": "address"},
+                    {"internalType": "uint256", "name": "value", "type": "uint256"},
+                    {"internalType": "bytes", "name": "data", "type": "bytes"},
+                    {"internalType": "string", "name": "jurisdiction", "type": "string"},
+                    {"internalType": "bytes32", "name": "purposeCode", "type": "bytes32"},
+                    {"internalType": "string", "name": "ipfsHash", "type": "string"},
+                    {"internalType": "bool", "name": "requiresEscrow", "type": "bool"}
+                ],
+                "name": "propose",
+                "outputs": [{"internalType": "uint256", "name": "", "type": "uint256"}],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [{"internalType": "uint256", "name": "proposalId", "type": "uint256"}],
+                "name": "executeProposal",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [{"internalType": "uint256", "name": "proposalId", "type": "uint256"}],
+                "name": "approveMultiSig",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "pause",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "inputs": [],
+                "name": "unpause",
+                "outputs": [],
+                "stateMutability": "nonpayable",
+                "type": "function"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {"indexed": true, "internalType": "uint256", "name": "id", "type": "uint256"},
+                    {"indexed": false, "internalType": "address", "name": "proposer", "type": "address"},
+                    {"indexed": false, "internalType": "bytes32", "name": "actionHash", "type": "bytes32"}
+                ],
+                "name": "ProposalCreated",
+                "type": "event"
+            },
+            {
+                "anonymous": false,
+                "inputs": [
+                    {"indexed": true, "internalType": "uint256", "name": "id", "type": "uint256"},
+                    {"indexed": false, "internalType": "address", "name": "executor", "type": "address"}
+                ],
+                "name": "ProposalExecuted",
+                "type": "event"
+            }
+        ];
+
+        // Simplified contract bytecode (would be full bytecode in production)
+        const CONTRACT_BYTECODE = "0x608060405234801561001057600080fd5b50611234567890abcdef";
+
+        // Global state
+        let provider = null;
+        let signer = null;
+        let contract = null;
+        let account = null;
+        let selectedNetwork = 'sepolia';
+        let activityFeed = [];
+        let proposals = [];
+
+        // Network configurations
+        const NETWORKS = {
+            'sepolia': {
+                chainId: '0xaa36a7',
+                name: 'Sepolia Testnet',
+                rpc: 'https://sepolia.infura.io/v3/YOUR_INFURA_KEY',
+                explorer: 'https://sepolia.etherscan.io'
+            },
+            'mainnet': {
+                chainId: '0x1',
+                name: 'Ethereum Mainnet',
+                rpc: 'https://mainnet.infura.io/v3/YOUR_INFURA_KEY',
+                explorer: 'https://etherscan.io'
+            },
+            'polygon': {
+                chainId: '0x89',
+                name: 'Polygon',
+                rpc: 'https://polygon-rpc.com',
+                explorer: 'https://polygonscan.com'
+            }
+        };
+
+        // Initialize
+        document.addEventListener('DOMContentLoaded', async () => {
+            setupEventListeners();
+            checkWeb3();
+            startBlockUpdater();
+            loadFromLocalStorage();
+        });
+
+        function checkWeb3() {
+            if (typeof window.ethereum !== 'undefined') {
+                console.log('MetaMask detected');
+                document.getElementById('connectBtn').disabled = false;
+            } else {
+                addActivity('System', 'MetaMask not detected. Please install MetaMask to interact with the DAO.');
+                document.getElementById('connectBtn').textContent = 'Install MetaMask';
+                document.getElementById('connectBtn').onclick = () => {
+                    window.open('https://metamask.io/download/', '_blank');
+                };
+            }
+        }
+
+        function setupEventListeners() {
+            // Connect button
+            document.getElementById('connectBtn').addEventListener('click', connectWallet);
+            
+            // Deploy button
+            document.getElementById('deployBtn').addEventListener('click', deployContract);
+            
+            // Load contract button
+            document.getElementById('loadContractBtn').addEventListener('click', loadExistingContract);
+            
+            // Network selector
+            document.querySelectorAll('.network-btn').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.network-btn').forEach(b => b.classList.remove('active'));
+                    e.target.classList.add('active');
+                    selectedNetwork = e.target.dataset.network;
+                    switchNetwork();
+                });
+            });
+            
+            // Tabs
+            document.querySelectorAll('.tab').forEach(tab => {
+                tab.addEventListener('click', (e) => {
+                    const tabName = e.target.dataset.tab;
+                    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                    document.querySelectorAll('.tab-content').forEach(tc => tc.classList.remove('active'));
+                    e.target.classList.add('active');
+                    document.getElementById(`${tabName}Tab`).classList.add('active');
+                });
+            });
+            
+            // Proposal form
+            document.getElementById('proposalForm').addEventListener('submit', submitProposal);
+            
+            // Admin buttons
+            document.getElementById('pauseBtn').addEventListener('click', pauseContract);
+            document.getElementById('unpauseBtn').addEventListener('click', unpauseContract);
+        }
+
+        async function connectWallet() {
+            try {
+                const accounts = await window.ethereum.request({ method: 'eth_requestAccounts' });
+                account = accounts[0];
+                
+                provider = new ethers.BrowserProvider(window.ethereum);
+                signer = await provider.getSigner();
+                
+                document.getElementById('accountAddress').textContent = `${account.slice(0, 6)}...${account.slice(-4)}`;
+                document.getElementById('deploySection').style.display = 'block';
+                document.getElementById('connectBtn').textContent = 'Connected';
+                document.getElementById('connectBtn').disabled = true;
+                
+                addActivity('Wallet Connected', `Address: ${account}`);
+                
+                // Listen for account changes
+                window.ethereum.on('accountsChanged', (accounts) => {
+                    if (accounts.length === 0) {
+                        disconnect();
+                    } else {
+                        account = accounts[0];
+                        document.getElementById('accountAddress').textContent = `${account.slice(0, 6)}...${account.slice(-4)}`;
+                        addActivity('Account Changed', `New address: ${account}`);
+                    }
+                });
+                
+                // Listen for network changes
+                window.ethereum.on('chainChanged', (chainId) => {
+                    window.location.reload();
+                });
+                
+                updateNetworkInfo();
+            } catch (error) {
+                console.error('Connection failed:', error);
+                addActivity('Connection Failed', error.message, 'error');
+            }
+        }
+
+        async function deployContract() {
+            if (!signer) return;
+            
+            showTxModal('Deploying contract...');
+            
+            try {
+                // In a real implementation, this would deploy the actual contract
+                // For demo purposes, we'll simulate deployment
+                const factory = new ethers.ContractFactory(CONTRACT_ABI, CONTRACT_BYTECODE, signer);
+                
+                // Simulate deployment (in reality, would be: const contract = await factory.deploy())
+                const txHash = '0x' + Math.random().toString(36).substring(2) + Math.random().toString(36).substring(2);
+                const contractAddress = '0x' + Math.random().toString(36).substring(2, 10).toUpperCase() + 
+                                       Math.random().toString(36).substring(2, 10).toUpperCase();
+                
+                addActivity('Contract Deployment', `Transaction: ${txHash}`);
+                
+                // Simulate deployment delay
+                await new Promise(resolve => setTimeout(resolve, 3000));
+                
+                // Set up contract instance
+                contract = new ethers.Contract(contractAddress, CONTRACT_ABI, signer);
+                
+                document.getElementById('contractAddressDisplay').textContent = contractAddress;
+                document.getElementById('interfaceSection').style.display = 'block';
+                
+                addActivity('Contract Deployed', `Address: ${contractAddress}`, 'success');
+                hideTxModal();
+                
+                // Save to localStorage
+                localStorage.setItem('contractAddress', contractAddress);
+                localStorage.setItem('network', selectedNetwork);
+                
+                // Start listening to events
+                listenToContractEvents();
+                
+            } catch (error) {
+                console.error('Deployment failed:', error);
+                addActivity('Deployment Failed', error.message, 'error');
+                hideTxModal();
+            }
+        }
+
+        async function loadExistingContract() {
+            const address = document.getElementById('existingContract').value;
+            if (!ethers.isAddress(address)) {
+                alert('Invalid contract address');
+                return;
+            }
+            
+            try {
+                contract = new ethers.Contract(address, CONTRACT_ABI, signer);
+                
+                // Test if contract exists by calling a view function
+                await contract.proposalCounter();
+                
+                document.getElementById('contractAddressDisplay').textContent = address;
+                document.getElementById('interfaceSection').style.display = 'block';
+                
+                addActivity('Contract Loaded', `Address: ${address}`, 'success');
+                
+                localStorage.setItem('contractAddress', address);
+                localStorage.setItem('network', selectedNetwork);
+                
+                listenToContractEvents();
+                loadProposals();
+                
+            } catch (error) {
+                console.error('Failed to load contract:', error);
+                addActivity('Load Failed', 'Contract not found at this address', 'error');
+            }
+        }
+
+        async function submitProposal(e) {
+            e.preventDefault();
+            if (!contract) return;
+            
+            const target = document.getElementById('targetAddress').value;
+            const amount = ethers.parseEther(document.getElementById('proposalAmount').value);
+            const jurisdiction = document.getElementById('jurisdiction').value;
+            const purposeCode = ethers.id(document.getElementById('purposeCode').value);
+            const description = document.getElementById('description').value;
+            const requiresEscrow = document.getElementById('requiresEscrow').checked;
+            
+            showTxModal('Submitting proposal...');
+            
+            try {
+                // Simulate IPFS upload
+                const ipfsHash = 'Qm' + Math.random().toString(36).substring(2, 15);
+                
+                // In reality, would call: await contract.propose(target, amount, '0x', jurisdiction, purposeCode, ipfsHash, requiresEscrow)
+                const proposalId = proposals.length + 1;
+                
+                const proposal = {
+                    id: proposalId,
+                    proposer: account,
+                    target: target,
+                    amount: ethers.formatEther(amount),
+                    jurisdiction: jurisdiction,
+                    purpose: document.getElementById('purposeCode').value,
+                    description: description,
+                    status: 'pending',
+                    timestamp: Date.now(),
+                    votes: { for: 0, against: 0 },
+                    requiresEscrow: requiresEscrow
+                };
+                
+                proposals.push(proposal);
+                localStorage.setItem('proposals', JSON.stringify(proposals));
+                
+                addActivity('Proposal Created', `#${proposalId}: ${description.substring(0, 50)}...`, 'success');
+                
+                updateProposalsDisplay();
+                document.getElementById('proposalForm').reset();
+                hideTxModal();
+                
+                // Broadcast to other viewers via localStorage event
+                broadcastUpdate('proposal', proposal);
+                
+            } catch (error) {
+                console.error('Proposal failed:', error);
+                addActivity('Proposal Failed', error.message, 'error');
+                hideTxModal();
+            }
+        }
+
+        function listenToContractEvents() {
+            if (!contract) return;
+            
+            // In reality, would set up actual event listeners
+            // For demo, we'll simulate events
+            setInterval(() => {
+                if (Math.random() > 0.8) {
+                    const eventTypes = ['ProposalCreated', 'ProposalExecuted', 'FundsReceived'];
+                    const eventType = eventTypes[Math.floor(Math.random() * eventTypes.length)];
+                    
+                    const event = {
+                        type: eventType,
+                        data: {
+                            id: Math.floor(Math.random() * 100),
+                            amount: (Math.random() * 10).toFixed(3) + ' ETH',
+                            address: '0x' + Math.random().toString(36).substring(2, 10)
+                        }
+                    };
+                    
+                    handleContractEvent(event);
+                }
+            }, 10000);
+        }
+
+        function handleContractEvent(event) {
+            let message = '';
+            switch(event.type) {
+                case 'ProposalCreated':
+                    message = `New proposal #${event.data.id} created`;
+                    break;
+                case 'ProposalExecuted':
+                    message = `Proposal #${event.data.id} executed`;
+                    break;
+                case 'FundsReceived':
+                    message = `Received ${event.data.amount} from ${event.data.address}`;
+                    break;
+            }
+            
+            addActivity('Contract Event', message);
+            broadcastUpdate('event', event);
+        }
+
+        function updateProposalsDisplay() {
+            const display = document.getElementById('proposalsDisplay');
+            const voteTab = document.getElementById('proposalsList');
+            
+            if (proposals.length === 0) {
+                display.innerHTML = '<p style="color: #999;">No proposals yet</p>';
+                voteTab.innerHTML = '<p style="color: #999;">No proposals to vote on</p>';
+                return;
+            }
+            
+            let html = '';
+            let voteHtml = '';
+            
+            proposals.forEach(proposal => {
+                const statusClass = proposal.status === 'executed' ? 'status-executed' : 
+                                   proposal.status === 'canceled' ? 'status-canceled' : 'status-pending';
+                
+                html += `
+                    <div class="proposal-card">
+                        <div class="proposal-header">
+                            <span class="proposal-id">Proposal #${proposal.id}</span>
+                            <span class="proposal-status ${statusClass}">${proposal.status.toUpperCase()}</span>
+                        </div>
+                        <div><strong>Amount:</strong> ${proposal.amount} ETH</div>
+                        <div><strong>Target:</strong> ${proposal.target.slice(0, 10)}...</div>
+                        <div><strong>Jurisdiction:</strong> ${proposal.jurisdiction}</div>
+                        <div><strong>Purpose:</strong> ${proposal.purpose}</div>
+                        <div style="margin-top: 10px;">${proposal.description}</div>
+                        <div style="margin-top: 10px; color: #666;">
+                            Votes: ${proposal.votes.for} for / ${proposal.votes.against} against
+                        </div>
+                    </div>
+                `;
+                
+                if (proposal.status === 'pending') {
+                    voteHtml += `
+                        <div class="proposal-card">
+                            <h4>Proposal #${proposal.id}</h4>
+                            <p>${proposal.description}</p>
+                            <div style="display: flex; gap: 10px; margin-top: 15px;">
+                                <button class="btn btn-success" onclick="voteOnProposal(${proposal.id}, true)">
+                                    Vote For
+                                </button>
+                                <button class="btn btn-secondary" onclick="voteOnProposal(${proposal.id}, false)">
+                                    Vote Against
+                                </button>
+                                <button class="btn" onclick="executeProposal(${proposal.id})">
+                                    Execute
+                                </button>
+                            </div>
+                        </div>
+                    `;
+                }
+            });
+            
+            display.innerHTML = html;
+            voteTab.innerHTML = voteHtml || '<p style="color: #999;">No active proposals</p>';
+            
+            // Update stats
+            document.getElementById('totalProposals').textContent = proposals.length;
+            const executed = proposals.filter(p => p.status === 'executed').length;
+            const successRate = proposals.length > 0 ? Math.round((executed / proposals.length) * 100) : 0;
+            document.getElementById('successRate').textContent = successRate + '%';
+        }
+
+        async function voteOnProposal(proposalId, support) {
+            const proposal = proposals.find(p => p.id === proposalId);
+            if (!proposal) return;
+            
+            if (support) {
+                proposal.votes.for++;
+            } else {
+                proposal.votes.against++;
+            }
+            
+            localStorage.setItem('proposals', JSON.stringify(proposals));
+            updateProposalsDisplay();
+            
+            addActivity('Vote Cast', `${support ? 'For' : 'Against'} proposal #${proposalId}`);
+            broadcastUpdate('vote', { proposalId, support });
+        }
+
+        async function executeProposal(proposalId) {
+            const proposal = proposals.find(p => p.id === proposalId);
+            if (!proposal) return;
+            
+            showTxModal('Executing proposal...');
+            
+            // Simulate execution
+            setTimeout(() => {
+                proposal.status = 'executed';
+                localStorage.setItem('proposals', JSON.stringify(proposals));
+                updateProposalsDisplay();
+                
+                addActivity('Proposal Executed', `#${proposalId} has been executed`, 'success');
+                broadcastUpdate('execution', { proposalId });
+                hideTxModal();
+            }, 2000);
+        }
+
+        async function pauseContract() {
+            if (!contract) return;
+            
+            showTxModal('Pausing contract...');
+            
+            setTimeout(() => {
+                addActivity('Contract Paused', 'Emergency pause activated', 'error');
+                hideTxModal();
+                broadcastUpdate('pause', {});
+            }, 1500);
+        }
+
+        async function unpauseContract() {
+            if (!contract) return;
+            
+            showTxModal('Unpausing contract...');
+            
+            setTimeout(() => {
+                addActivity('Contract Unpaused', 'Normal operations resumed', 'success');
+                hideTxModal();
+                broadcastUpdate('unpause', {});
+            }, 1500);
+        }
+
+        function addActivity(action, details, type = 'info') {
+            const activity = {
+                action,
+                details,
+                type,
+                timestamp: Date.now()
+            };
+            
+            activityFeed.unshift(activity);
+            if (activityFeed.length > 50) activityFeed.pop();
+            
+            updateActivityFeed();
+        }
+
+        function updateActivityFeed() {
+            const feed = document.getElementById('activityFeed');
+            
+            let html = '';
+            activityFeed.forEach(item => {
+                const time = new Date(item.timestamp).toLocaleTimeString();
+                html += `
+                    <div class="activity-item">
+                        <div class="activity-time">${time}</div>
+                        <div class="activity-action">${item.action}</div>
+                        <div class="activity-details">${item.details}</div>
+                    </div>
+                `;
+            });
+            
+            feed.innerHTML = html;
+        }
+
+        async function updateNetworkInfo() {
+            if (!provider) return;
+            
+            const network = await provider.getNetwork();
+            document.getElementById('networkName').textContent = network.name || `Chain ${network.chainId}`;
+            
+            const balance = await provider.getBalance(account);
+            document.getElementById('treasuryBalance').textContent = ethers.formatEther(balance).substring(0, 6) + ' ETH';
+        }
+
+        function startBlockUpdater() {
+            setInterval(async () => {
+                if (provider) {
+                    const blockNumber = await provider.getBlockNumber();
+                    document.getElementById('blockNumber').textContent = `Block: ${blockNumber}`;
+                }
+            }, 5000);
+        }
+
+        async function switchNetwork() {
+            if (!window.ethereum) return;
+            
+            const network = NETWORKS[selectedNetwork];
+            
+            try {
+                await window.ethereum.request({
+                    method: 'wallet_switchEthereumChain',
+                    params: [{ chainId: network.chainId }],
+                });
+            } catch (error) {
+                if (error.code === 4902) {
+                    // Chain not added, add it
+                    await window.ethereum.request({
+                        method: 'wallet_addEthereumChain',
+                        params: [{
+                            chainId: network.chainId,
+                            chainName: network.name,
+                            rpcUrls: [network.rpc],
+                            blockExplorerUrls: [network.explorer]
+                        }],
+                    });
+                }
+            }
+        }
+
+        function showTxModal(message) {
+            document.getElementById('txStatus').innerHTML = `
+                <div class="loading"></div>
+                <p style="margin-top: 20px;">${message}</p>
+            `;
+            document.getElementById('txModal').classList.add('active');
+        }
+
+        function hideTxModal() {
+            document.getElementById('txModal').classList.remove('active');
+        }
+
+        function loadFromLocalStorage() {
+            const savedProposals = localStorage.getItem('proposals');
+            if (savedProposals) {
+                proposals = JSON.parse(savedProposals);
+                updateProposalsDisplay();
+            }
+            
+            const savedAddress = localStorage.getItem('contractAddress');
+            const savedNetwork = localStorage.getItem('network');
+            
+            if (savedAddress && savedNetwork === selectedNetwork) {
+                document.getElementById('existingContract').value = savedAddress;
+            }
+        }
+
+        function broadcastUpdate(type, data) {
+            // Use localStorage events for cross-tab communication
+            const update = {
+                type,
+                data,
+                timestamp: Date.now(),
+                sender: account
+            };
+            
+            localStorage.setItem('lastUpdate', JSON.stringify(update));
+            
+            // Trigger storage event for other tabs
+            window.dispatchEvent(new StorageEvent('storage', {
+                key: 'lastUpdate',
+                newValue: JSON.stringify(update),
+                url: window.location.href
+            }));
+        }
+
+        // Listen for updates from other tabs/windows
+        window.addEventListener('storage', (e) => {
+            if (e.key === 'lastUpdate' && e.newValue) {
+                const update = JSON.parse(e.newValue);
+                
+                if (update.sender !== account) {
+                    // Update from another user
+                    addActivity('Live Update', `${update.type} from ${update.sender?.slice(0, 6)}...`);
+                    
+                    if (update.type === 'proposal' || update.type === 'vote' || update.type === 'execution') {
+                        // Reload proposals
+                        const savedProposals = localStorage.getItem('proposals');
+                        if (savedProposals) {
+                            proposals = JSON.parse(savedProposals);
+                            updateProposalsDisplay();
+                        }
+                    }
+                }
+            }
+        });
+
+        // Simulate other users' activities
+        setInterval(() => {
+            if (Math.random() > 0.7) {
+                const activities = [
+                    { action: 'External User', details: 'Someone viewed the contract' },
+                    { action: 'Network Activity', details: 'New block mined' },
+                    { action: 'Oracle Update', details: 'Compliance oracle synchronized' }
+                ];
+                
+                const activity = activities[Math.floor(Math.random() * activities.length)];
+                addActivity(activity.action, activity.details);
+            }
+        }, 15000);
+    </script>
+</body>
+</html>
