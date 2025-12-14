@@ -1,0 +1,363 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.23;
+
+/*
+AIAccountabilityEscrow
+- Funds locked until independent oracles attest the AI output passes safety/accuracy.
+- Anti-inversion: only "peaceful" terms from a Merkle-rooted TermBank are allowed.
+- Anti-tamper provenance: emits manifest/hash/IPFS events; stores codehash at deploy.
+- Human-in-the-loop: guardian multisig can pause/resolve in emergencies (zero-harm).
+- Narrative reframing: each escrow binds to a Peace Narrative term-set (by Merkle proof).
+*/
+
+library MerkleProofMinimal {
+    function verify(bytes32[] memory proof, bytes32 root, bytes32 leaf) internal pure returns (bool) {
+        bytes32 computedHash = leaf;
+        for (uint256 i = 0; i < proof.length; i++) {
+            bytes32 proofElement = proof[i];
+            if (computedHash <= proofElement) {
+                // Hash(current computed hash + current element of the proof)
+                computedHash = keccak256(abi.encodePacked(computedHash, proofElement));
+            } else {
+                // Hash(current element of the proof + current computed hash)
+                computedHash = keccak256(abi.encodePacked(proofElement, computedHash));
+            }
+        }
+        return computedHash == root;
+    }
+}
+
+interface IERC20Like {
+    function transferFrom(address from, address to, uint256 value) external returns (bool);
+    function transfer(address to, uint256 value) external returns (bool);
+}
+
+contract AIAccountabilityEscrow {
+    using MerkleProofMinimal for bytes32[];
+
+    enum State { None, Funded, Submitted, Finalized, Canceled, Remediation }
+    enum Verdict { Undefined, PASS, FAIL, HARM } // HARM = measurable harm found
+
+    struct OracleInfo {
+        uint96 weight; // quorum math
+        bool active;
+    }
+
+    struct OracleReport {
+        Verdict verdict;
+        bytes32 reasonsHash;     // hash of human/oracle rationale or report bundle
+        string uri;              // optional off-chain pointer (IPFS/HTTPS)
+        bool submitted;
+    }
+
+    struct PeaceSelection {
+        // leaf = keccak256(abi.encodePacked(termId, termHash))
+        // prove each leaf is in the global peacefulTermRoot (immutable mycelial bank)
+        bytes32[] leaves; // stored for audit; dedup at UI level if desired
+        // NB: proofs are not stored to save gas; only verified on submission.
+    }
+
+    struct Escrow {
+        address requester;
+        address provider;     // AI agent owner or service provider
+        address token;        // address(0)=ETH, else ERC20
+        uint256 amount;       // funded amount
+        State state;
+        uint96 quorum;        // minimum total PASS weight required
+        uint96 veto;          // total FAIL+HARM weight needed to hard-veto (route remediation)
+        uint64 deadline;      // optional timeout (epoch seconds)
+        bytes32 outputHash;   // hash of final AI output payload
+        bytes32 manifestHash; // ip_proof_manifest hash (zip/json bundle hash)
+        string manifestCID;   // IPFS CID of the manifest/zip (for external verification)
+        PeaceSelection peace; // verified peaceful terms selection
+        // Oracle tallies
+        uint96 passWeight;
+        uint96 failWeight;
+        uint96 harmWeight;
+        mapping(address => OracleReport) reports;
+    }
+
+    // ===== Immutable anti-tamper anchors =====
+    bytes32 public immutable codeHashAtDeploy;      // extcodehash(address(this)) at deploy
+    bytes32 public immutable peacefulTermRoot;      // Merkle root of "mycelial bank" (peace-only)
+    address public immutable guardian;              // human-in-the-loop multisig/EOA
+    address public immutable remediationSink;       // where funds go if veto/harm
+    address public owner;
+
+    // ===== Registries & storage =====
+    mapping(address => OracleInfo) public oracles;
+    mapping(bytes32 => Escrow) private escrows;     // jobId => Escrow
+
+    // ===== Global safety switches =====
+    bool public paused;
+
+    // ===== Events =====
+    event OracleUpdated(address indexed oracle, uint96 weight, bool active);
+    event Paused(bool status);
+    event EscrowCreated(bytes32 indexed jobId, address indexed requester, address indexed provider, address token, uint256 amount, uint96 quorum, uint96 veto, uint64 deadline);
+    event PeaceTermsBound(bytes32 indexed jobId, bytes32 termLeaf); // emit for each accepted leaf
+    event OutputSubmitted(bytes32 indexed jobId, bytes32 outputHash);
+    event ManifestUpdated(bytes32 indexed jobId, string cid, bytes32 manifestHash, bytes32 zipHash);
+    event NewTextTimestamped(bytes32 indexed jobId, bytes32 textHash, string uri);
+    event OracleReported(bytes32 indexed jobId, address indexed oracle, Verdict verdict, bytes32 reasonsHash, string uri, uint96 weight);
+    event FinalizedToProvider(bytes32 indexed jobId, address provider, uint256 amount, address token);
+    event RoutedToRemediation(bytes32 indexed jobId, address remediation, uint256 amount, address token);
+    event Canceled(bytes32 indexed jobId, address caller);
+    event SourceEditedScramble(bytes32 indexed jobId, bytes32 scrambleNonce, string note);
+
+    modifier onlyOwner() { require(msg.sender == owner, "not owner"); _; }
+    modifier onlyGuardian() { require(msg.sender == guardian, "not guardian"); _; }
+    modifier notPaused() { require(!paused, "paused"); _; }
+
+    constructor(
+        bytes32 _peacefulTermRoot,
+        address _guardian,
+        address _remediationSink
+    ) {
+        owner = msg.sender;
+        peacefulTermRoot = _peacefulTermRoot;
+        guardian = _guardian;
+        remediationSink = _remediationSink;
+        codeHashAtDeploy = extcodehash(address(this)); // anti-tamper anchor
+    }
+
+    // ===== Admin =====
+    function setOracle(address who, uint96 weight, bool active) external onlyOwner {
+        oracles[who] = OracleInfo({weight: weight, active: active});
+        emit OracleUpdated(who, weight, active);
+    }
+    function setPaused(bool p) external onlyGuardian {
+        paused = p;
+        emit Paused(p);
+    }
+    function transferOwnership(address newOwner) external onlyOwner { owner = newOwner; }
+
+    // ===== Core: Create & fund =====
+    function createEscrowETH(
+        bytes32 jobId,
+        address provider,
+        uint96 quorum,
+        uint96 veto,
+        uint64 deadline
+    ) external payable notPaused {
+        require(escrows[jobId].state == State.None, "exists");
+        require(msg.value > 0, "no value");
+        _initEscrow(jobId, msg.sender, provider, address(0), msg.value, quorum, veto, deadline);
+    }
+
+    function createEscrowERC20(
+        bytes32 jobId,
+        address provider,
+        address token,
+        uint256 amount,
+        uint96 quorum,
+        uint96 veto,
+        uint64 deadline
+    ) external notPaused {
+        require(escrows[jobId].state == State.None, "exists");
+        require(token != address(0) && amount > 0, "bad token/amount");
+        // pull funds
+        require(IERC20Like(token).transferFrom(msg.sender, address(this), amount), "erc20 xferFrom fail");
+        _initEscrow(jobId, msg.sender, provider, token, amount, quorum, veto, deadline);
+    }
+
+    function _initEscrow(
+        bytes32 jobId,
+        address requester,
+        address provider,
+        address token,
+        uint256 amount,
+        uint96 quorum,
+        uint96 veto,
+        uint64 deadline
+    ) internal {
+        Escrow storage e = escrows[jobId];
+        e.requester = requester;
+        e.provider = provider;
+        e.token = token;
+        e.amount = amount;
+        e.quorum = quorum;
+        e.veto = veto;
+        e.deadline = deadline;
+        e.state = State.Funded;
+        emit EscrowCreated(jobId, requester, provider, token, amount, quorum, veto, deadline);
+    }
+
+    // ===== Bind Peace (mycelial bank) terms =====
+    // Each selected term must be proven against the immutable peacefulTermRoot.
+    function bindPeaceTerms(
+        bytes32 jobId,
+        bytes32[] calldata termLeaves,
+        bytes32[][] calldata proofs
+    ) external notPaused {
+        Escrow storage e = escrows[jobId];
+        require(msg.sender == e.requester || msg.sender == e.provider || msg.sender == guardian, "not party/guardian");
+        require(e.state == State.Funded || e.state == State.Submitted, "bad state");
+        require(termLeaves.length == proofs.length, "len mismatch");
+        // Verify and record selections
+        for (uint256 i = 0; i < termLeaves.length; i++) {
+            require(proofs[i].verify(peacefulTermRoot, termLeaves[i]), "term not peaceful");
+            e.peace.leaves.push(termLeaves[i]);
+            emit PeaceTermsBound(jobId, termLeaves[i]);
+        }
+    }
+
+    // ===== Submit output & provenance =====
+    function submitOutput(bytes32 jobId, bytes32 outputHash) external notPaused {
+        Escrow storage e = escrows[jobId];
+        require(msg.sender == e.provider, "not provider");
+        require(e.state == State.Funded || e.state == State.Submitted, "bad state");
+        e.outputHash = outputHash;
+        e.state = State.Submitted;
+        emit OutputSubmitted(jobId, outputHash);
+    }
+
+    // Off-chain provenance loop hook: update manifest (zip/json), CID & hashes.
+    function updateManifest(bytes32 jobId, string calldata cid, bytes32 manifestHash, bytes32 zipHash) external notPaused {
+        Escrow storage e = escrows[jobId];
+        require(msg.sender == e.provider || msg.sender == e.requester || msg.sender == guardian, "not authorized");
+        require(e.state == State.Funded || e.state == State.Submitted, "bad state");
+        e.manifestCID = cid;
+        e.manifestHash = manifestHash;
+        emit ManifestUpdated(jobId, cid, manifestHash, zipHash);
+    }
+
+    // Free-form narrative / rationale timestamping (any party/oracle/guardian)
+    function newTextTimestamped(bytes32 jobId, bytes32 textHash, string calldata uri) external {
+        Escrow storage e = escrows[jobId];
+        require(e.state != State.None, "unknown job");
+        emit NewTextTimestamped(jobId, textHash, uri);
+    }
+
+    // Signal “source edit” with a scramble nonce (off-chain systems can enforce re-hash/re-zip/re-CID)
+    function sourceEditedScramble(bytes32 jobId, bytes32 scrambleNonce, string calldata note) external {
+        Escrow storage e = escrows[jobId];
+        require(msg.sender == e.provider || msg.sender == guardian, "not auth");
+        require(e.state == State.Funded || e.state == State.Submitted, "bad state");
+        emit SourceEditedScramble(jobId, scrambleNonce, note);
+    }
+
+    // ===== Oracle reporting =====
+    function oracleReport(
+        bytes32 jobId,
+        Verdict verdict,
+        bytes32 reasonsHash,
+        string calldata uri
+    ) external notPaused {
+        Escrow storage e = escrows[jobId];
+        OracleInfo memory info = oracles[msg.sender];
+        require(info.active && info.weight > 0, "not oracle");
+        require(e.state == State.Submitted, "not submitted");
+        OracleReport storage r = e.reports[msg.sender];
+        require(!r.submitted, "already reported");
+
+        r.verdict = verdict;
+        r.reasonsHash = reasonsHash;
+        r.uri = uri;
+        r.submitted = true;
+
+        if (verdict == Verdict.PASS) e.passWeight += info.weight;
+        else if (verdict == Verdict.FAIL) e.failWeight += info.weight;
+        else if (verdict == Verdict.HARM) e.harmWeight += info.weight;
+
+        emit OracleReported(jobId, msg.sender, verdict, reasonsHash, uri, info.weight);
+    }
+
+    // ===== Finalization =====
+    function finalize(bytes32 jobId) external notPaused {
+        Escrow storage e = escrows[jobId];
+        require(e.state == State.Submitted, "bad state");
+        // Require at least one peaceful term bound to prevent inversion-by-omission
+        require(e.peace.leaves.length > 0, "peace terms missing");
+        // Require manifest/output present
+        require(e.outputHash != bytes32(0) && e.manifestHash != bytes32(0), "provenance incomplete");
+
+        // Veto first
+        uint96 vetoWeight = e.failWeight + e.harmWeight;
+        if (vetoWeight >= e.veto) {
+            _routeToRemediation(jobId, e);
+            return;
+        }
+        // Quorum pass
+        require(e.passWeight >= e.quorum, "quorum not met");
+
+        _payProvider(jobId, e);
+    }
+
+    // Guardian emergency paths
+    function guardianRemediate(bytes32 jobId) external onlyGuardian {
+        Escrow storage e = escrows[jobId];
+        require(e.state == State.Funded || e.state == State.Submitted, "bad state");
+        _routeToRemediation(jobId, e);
+    }
+    function guardianFinalizeToProvider(bytes32 jobId) external onlyGuardian {
+        Escrow storage e = escrows[jobId];
+        require(e.state == State.Submitted, "bad state");
+        _payProvider(jobId, e);
+    }
+    function cancel(bytes32 jobId) external {
+        Escrow storage e = escrows[jobId];
+        require(msg.sender == e.requester || msg.sender == guardian, "not auth");
+        require(e.state == State.Funded, "cannot cancel");
+        e.state = State.Canceled;
+        // refund requester
+        if (e.token == address(0)) {
+            (bool ok, ) = e.requester.call{value: e.amount}("");
+            require(ok, "refund fail");
+        } else {
+            require(IERC20Like(e.token).transfer(e.requester, e.amount), "erc20 refund fail");
+        }
+        emit Canceled(jobId, msg.sender);
+    }
+
+    // ===== Internals =====
+    function _payProvider(bytes32 jobId, Escrow storage e) internal {
+        e.state = State.Finalized;
+        if (e.token == address(0)) {
+            (bool ok, ) = e.provider.call{value: e.amount}("");
+            require(ok, "eth xfer fail");
+        } else {
+            require(IERC20Like(e.token).transfer(e.provider, e.amount), "erc20 xfer fail");
+        }
+        emit FinalizedToProvider(jobId, e.provider, e.amount, e.token);
+    }
+
+    function _routeToRemediation(bytes32 jobId, Escrow storage e) internal {
+        e.state = State.Remediation;
+        if (e.token == address(0)) {
+            (bool ok, ) = remediationSink.call{value: e.amount}("");
+            require(ok, "eth route fail");
+        } else {
+            require(IERC20Like(e.token).transfer(remediationSink, e.amount), "erc20 route fail");
+        }
+        emit RoutedToRemediation(jobId, remediationSink, e.amount, e.token);
+    }
+
+    // ===== Views =====
+    function getEscrow(
+        bytes32 jobId
+    ) external view returns (
+        address requester,
+        address provider,
+        address token,
+        uint256 amount,
+        State state,
+        uint96 quorum,
+        uint96 veto,
+        uint64 deadline,
+        bytes32 outputHash,
+        string memory manifestCID,
+        bytes32 manifestHash,
+        uint96 passWeight,
+        uint96 failWeight,
+        uint96 harmWeight
+    ) {
+        Escrow storage e = escrows[jobId];
+        requester = e.requester; provider = e.provider; token = e.token; amount = e.amount;
+        state = e.state; quorum = e.quorum; veto = e.veto; deadline = e.deadline;
+        outputHash = e.outputHash; manifestCID = e.manifestCID; manifestHash = e.manifestHash;
+        passWeight = e.passWeight; failWeight = e.failWeight; harmWeight = e.harmWeight;
+    }
+
+    receive() external payable {}
+}
